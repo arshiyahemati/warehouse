@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>انبار</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --surface: #ffffff;
+    --ink: #1c2733;
+    --muted: #5d6b7a;
+    --line: #d5dce3;
+    --accent: #1f4e79;
+    --accent-ink: #ffffff;
+    --hazard: #f2b705;
+    --danger: #b42318;
+    --ok: #17794a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161c23;
+      --surface: #1f2730;
+      --ink: #e6ebf0;
+      --muted: #94a3b3;
+      --line: #33404d;
+      --accent: #6fa8dc;
+      --accent-ink: #10202f;
+      --hazard: #f2b705;
+      --danger: #f2877d;
+      --ok: #5fcf9a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: Vazirmatn, Tahoma, "Segoe UI", sans-serif; line-height: 1.7;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
+  header.top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; background: var(--surface); border-bottom: 4px solid var(--hazard);
+  }
+  header.top h1 { font-size: 18px; margin: 0; }
+  header.top .who { font-size: 13px; color: var(--muted); }
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px; margin-top: 16px;
+  }
+  .panel h2 { font-size: 16px; margin: 0 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .grid .full { grid-column: 1 / -1; }
+  @media (min-width: 720px) { .grid { grid-template-columns: repeat(4, 1fr); } .grid .half { grid-column: span 2; } }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, select {
+    width: 100%; padding: 10px 12px; font: inherit; font-size: 16px;
+    color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  input:focus, select:focus, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; padding: 10px 18px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--danger); }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { min-height: 22px; font-size: 14px; margin-top: 10px; }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--ok); }
+  .note { font-size: 13px; color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  td.actions { display: flex; gap: 6px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .toolbar input { flex: 1; min-width: 160px; }
+  .login { max-width: 380px; margin: 12vh auto 0; }
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 16px; width: min(560px, 94vw); }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  .hidden { display: none !important; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 0; }
+</style>
+</head>
+<body>
+
+<!-- ============ تنظیمات: این سه مقدار را عوض کنید ============ -->
+<script>
+  const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL";
+  const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY";
+  const OWNER_EMAIL = "owner@example.com"; // همان ایمیلی که در setup.sql گذاشتید
+</script>
+<!-- ======================================================== -->
+
+<!-- Login -->
+<div id="loginView" class="wrap login hidden">
+  <div class="panel">
+    <h2>ورود به سیستم انبار</h2>
+    <div style="margin-bottom:12px"><label for="email">ایمیل</label><input id="email" type="email" autocomplete="username" dir="ltr"></div>
+    <div style="margin-bottom:12px"><label for="password">رمز عبور</label><input id="password" type="password" autocomplete="current-password" dir="ltr"></div>
+    <button class="primary" id="loginBtn" style="width:100%">ورود</button>
+    <div id="loginMsg" class="msg err"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="appView" class="hidden">
+  <header class="top">
+    <h1>ثبت کالای انبار</h1>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="who" id="who"></span>
+      <button class="small" id="logoutBtn">خروج</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="panel">
+      <h2>ثبت کالای جدید</h2>
+      <form id="addForm" class="grid" autocomplete="off">
+        <div class="half"><label for="f_customer">نام مشتری</label><input id="f_customer" required></div>
+        <div class="half"><label for="f_product">نام محصول</label><input id="f_product" required></div>
+        <div><label for="f_qty">تعداد</label><input id="f_qty" type="number" inputmode="decimal" step="any" min="0" required></div>
+        <div><label for="f_unit">واحد</label>
+          <select id="f_unit" required></select></div>
+        <div><label for="f_weight">وزن (کیلوگرم)</label><input id="f_weight" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div><label for="f_thick">ضخامت (میکرون)</label><input id="f_thick" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div><label for="f_width">عرض (سانتی‌متر)</label><input id="f_width" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div style="align-self:end"><button class="primary" id="addBtn" type="submit" style="width:100%">ثبت</button></div>
+      </form>
+      <div id="addMsg" class="msg"></div>
+      <p class="note" id="lockNote">پس از ثبت، رکورد قابل ویرایش یا حذف نیست. قبل از زدن «ثبت» مقادیر را بررسی کنید.</p>
+    </section>
+
+    <section class="panel">
+      <h2 id="listTitle">ثبت‌های شما</h2>
+      <div class="toolbar" id="toolbar">
+        <input id="search" placeholder="جستجو در مشتری یا محصول">
+        <button id="csvBtn" class="hidden">دریافت اکسل (CSV)</button>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>تاریخ</th><th>مشتری</th><th>محصول</th><th>تعداد</th><th>واحد</th>
+            <th>وزن</th><th>ضخامت</th><th>عرض</th><th id="actionsTh" class="hidden"></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="empty" class="empty hidden">هنوز چیزی ثبت نشده است.</div>
+    </section>
+  </div>
+</div>
+
+<!-- Edit dialog (owner only) -->
+<dialog id="editDlg">
+  <h2 style="font-size:16px;margin:0 0 12px">ویرایش رکورد</h2>
+  <form id="editForm" class="grid" method="dialog">
+    <div class="half"><label>نام مشتری</label><input id="e_customer" required></div>
+    <div class="half"><label>نام محصول</label><input id="e_product" required></div>
+    <div><label>تعداد</label><input id="e_qty" type="number" step="any" min="0" required></div>
+    <div><label>واحد</label><select id="e_unit"></select></div>
+    <div><label>وزن (کیلوگرم)</label><input id="e_weight" type="number" step="any" min="0"></div>
+    <div><label>ضخامت (میکرون)</label><input id="e_thick" type="number" step="any" min="0"></div>
+    <div><label>عرض (سانتی‌متر)</label><input id="e_width" type="number" step="any" min="0"></div>
+  </form>
+  <div id="editMsg" class="msg err"></div>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button class="primary" id="saveEdit">ذخیره</button>
+    <button id="cancelEdit">انصراف</button>
+  </div>
+</dialog>
+
+<script>
+  const UNITS = ["عدد", "کیلوگرم", "تن", "متر", "شیت", "رول", "بسته", "پالت", "کیسه"];
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const $ = (id) => document.getElementById(id);
+
+  let isOwner = false;
+  let rows = [];
+  let editingId = null;
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (v) => (v === "" || v == null ? null : Number(v));
+  const show = (el, on) => el.classList.toggle("hidden", !on);
+  const fa = (n) => (n == null ? "—" : Number(n).toLocaleString("fa-IR"));
+
+  function fillUnits(sel) {
+    sel.innerHTML = UNITS.map((u) => `<option>${u}</option>`).join("");
+  }
+  fillUnits($("f_unit"));
+  fillUnits($("e_unit"));
+
+  /* ---------- Auth ---------- */
+  async function route(session) {
+    if (!session) {
+      show($("loginView"), true);
+      show($("appView"), false);
+      return;
+    }
+    const email = (session.user.email || "").toLowerCase();
+    isOwner = email === OWNER_EMAIL.toLowerCase();
+    $("who").textContent = isOwner ? "مدیر" : "انباردار";
+    $("listTitle").textContent = isOwner ? "همه‌ی رکوردها" : "ثبت‌های شما (فقط مشاهده)";
+    show($("csvBtn"), isOwner);
+    show($("actionsTh"), isOwner);
+    show($("lockNote"), !isOwner);
+    show($("loginView"), false);
+    show($("appView"), true);
+    await load();
+  }
+
+  $("loginBtn").onclick = async () => {
+    $("loginMsg").textContent = "";
+    const { error } = await db.auth.signInWithPassword({
+      email: $("email").value.trim(),
+      password: $("password").value,
+    });
+    if (error) $("loginMsg").textContent = "ایمیل یا رمز عبور درست نیست.";
+  };
+  $("password").addEventListener("keydown", (e) => e.key === "Enter" && $("loginBtn").click());
+  $("logoutBtn").onclick = () => db.auth.signOut();
+
+  db.auth.onAuthStateChange((_evt, session) => route(session));
+  db.auth.getSession().then(({ data }) => route(data.session));
+
+  /* ---------- Data ---------- */
+  async function load() {
+    const { data, error } = await db.from("inventory").select("*").order("created_at", { ascending: false });
+    if (error) {
+      $("addMsg").className = "msg err";
+      $("addMsg").textContent = "خواندن اطلاعات ناموفق بود. اتصال اینترنت را بررسی کنید.";
+      return;
+    }
+    rows = data;
+    render();
+  }
+
+  function render() {
+    const q = $("search").value.trim().toLowerCase();
+    const list = rows.filter((r) => !q || r.customer_name.toLowerCase().includes(q) || r.product_name.toLowerCase().includes(q));
+    show($("empty"), list.length === 0);
+    $("rows").innerHTML = list.map((r) => `
+      <tr>
+        <td>${new Date(r.created_at).toLocaleString("fa-IR", { dateStyle: "short", timeStyle: "short" })}</td>
+        <td>${esc(r.customer_name)}</td>
+        <td>${esc(r.product_name)}</td>
+        <td>${fa(r.quantity)}</td>
+        <td>${esc(r.unit)}</td>
+        <td>${fa(r.weight)}</td>
+        <td>${fa(r.thickness)}</td>
+        <td>${fa(r.width)}</td>
+        ${isOwner ? `<td class="actions">
+          <button class="small" data-edit="${r.id}">ویرایش</button>
+          <button class="small danger" data-del="${r.id}">حذف</button></td>` : ""}
+      </tr>`).join("");
+  }
+  $("search").oninput = render;
+
+  $("addForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("addMsg");
+    msg.className = "msg"; msg.textContent = "";
+    $("addBtn").disabled = true;
+    const { error } = await db.from("inventory").insert({
+      customer_name: $("f_customer").value.trim(),
+      product_name: $("f_product").value.trim(),
+      quantity: Number($("f_qty").value),
+      unit: $("f_unit").value,
+      weight: num($("f_weight").value),
+      thickness: num($("f_thick").value),
+      width: num($("f_width").value),
+    });
+    $("addBtn").disabled = false;
+    if (error) {
+      msg.className = "msg err";
+      msg.textContent = "ثبت انجام نشد. دوباره تلاش کنید.";
+      return;
+    }
+    msg.className = "msg ok";
+    msg.textContent = "ثبت شد.";
+    // نام مشتری و واحد را نگه می‌داریم تا ثبت چند محصول پشت‌سرهم سریع باشد
+    ["f_product", "f_qty", "f_weight", "f_thick", "f_width"].forEach((id) => ($(id).value = ""));
+    $("f_product").focus();
+    await load();
+  });
+
+  /* ---------- Owner actions ---------- */
+  $("rows").addEventListener("click", async (e) => {
+    const editId = e.target.dataset.edit;
+    const delId = e.target.dataset.del;
+    if (editId) openEdit(Number(editId));
+    if (delId && confirm("این رکورد برای همیشه حذف شود؟")) {
+      const { error } = await db.from("inventory").delete().eq("id", Number(delId));
+      if (error) alert("حذف انجام نشد.");
+      await load();
+    }
+  });
+
+  function openEdit(id) {
+    const r = rows.find((x) => x.id === id);
+    if (!r) return;
+    editingId = id;
+    $("e_customer").value = r.customer_name;
+    $("e_product").value = r.product_name;
+    $("e_qty").value = r.quantity;
+    $("e_unit").value = r.unit;
+    $("e_weight").value = r.weight ?? "";
+    $("e_thick").value = r.thickness ?? "";
+    $("e_width").value = r.width ?? "";
+    $("editMsg").textContent = "";
+    $("editDlg").showModal();
+  }
+  $("cancelEdit").onclick = () => $("editDlg").close();
+  $("saveEdit").onclick = async () => {
+    if (!$("editForm").reportValidity()) return;
+    const { error } = await db.from("inventory").update({
+      customer_name: $("e_customer").value.trim(),
+      product_name: $("e_product").value.trim(),
+      quantity: Number($("e_qty").value),
+      unit: $("e_unit").value,
+      weight: num($("e_weight").value),
+      thickness: num($("e_thick").value),
+      width: num($("e_width").value),
+    }).eq("id", editingId);
+    if (error) { $("editMsg").textContent = "ذخیره انجام نشد."; return; }
+    $("editDlg").close();
+    await load();
+  };
+
+  $("csvBtn").onclick = () => {
+    const head = ["تاریخ", "مشتری", "محصول", "تعداد", "واحد", "وزن (کیلوگرم)", "ضخامت (میکرون)", "عرض (سانتی‌متر)"];
+    const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = rows.map((r) => [new Date(r.created_at).toISOString().slice(0, 16).replace("T", " "), r.customer_name, r.product_name, r.quantity, r.unit, r.weight, r.thickness, r.width].map(cell).join(","));
+    const blob = new Blob(["\ufeff" + [head.map(cell).join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "inventory.csv";
+    a.click();
+  };
+</script>
+</body>
+</html>
